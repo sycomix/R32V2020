@@ -5,8 +5,6 @@ import os
 import sys
 import re
 
-validRegisters = set()
-
 REGISTER_ALIASES = {
   'ZERO': 0,
   'ONE': 1,
@@ -34,27 +32,27 @@ maxValueImm = {
   'BIN_DEST_IMM': 65535
 }
 
-supportedForms = set([
-  'ADDR',
-  'BIN_CMP',
-  'BIN_CMP_IMM',
-  'BIN_CONST',
-  'BIN_DEST',
-  'BIN_DEST_IMM',
-  'IMM_DEST_16',
-  'IMM_DEST_20',
-  'IMM_DEST_24',
-  'NO_ARGS',
-  'R4_DEST',
-  'R5_DEST',
-  'R6_DEST',
-  'UN_DEST',
-  'BIN_R1_DEST',
-  'UN_R1_DEST',
-  'UN_R4_DEST',
-  'UN_R5_DEST',
-  'UN_R6_DEST'
-])
+supportedForms = {
+    'ADDR',
+    'BIN_CMP',
+    'BIN_CMP_IMM',
+    'BIN_CONST',
+    'BIN_DEST',
+    'BIN_DEST_IMM',
+    'IMM_DEST_16',
+    'IMM_DEST_20',
+    'IMM_DEST_24',
+    'NO_ARGS',
+    'R4_DEST',
+    'R5_DEST',
+    'R6_DEST',
+    'UN_DEST',
+    'BIN_R1_DEST',
+    'UN_R1_DEST',
+    'UN_R4_DEST',
+    'UN_R5_DEST',
+    'UN_R6_DEST',
+}
 
 constantFormRegister = {
   'BIN_CMP': 3,
@@ -69,9 +67,7 @@ constantFormRegister = {
   'UN_R6_DEST': 6
 }
 
-for i in xrange(0, 16):
-  validRegisters.add('R' + str(i))
-
+validRegisters = {f'R{str(i)}' for i in xrange(0, 16)}
 for alias in REGISTER_ALIASES:
   validRegisters.add(alias)
 
@@ -108,7 +104,10 @@ def assemblerAssert(condition, message):
 myDir = os.path.dirname(__file__)
 opsPath = os.path.join(myDir, 'ops.csv')
 
-assemblerAssert(os.path.isfile(opsPath), 'Expected an ops file at ' + os.path.abspath(opsPath))
+assemblerAssert(
+    os.path.isfile(opsPath),
+    f'Expected an ops file at {os.path.abspath(opsPath)}',
+)
 
 with open(opsPath) as csvfile:
   ops = list(csv.DictReader(csvfile))
@@ -170,7 +169,12 @@ class AddressResolver:
     self.currentAddress = currentAddress
 
   def resolveHex(self, addresses, __):
-    lineAssert(self.address in addresses, self.lineNumber, self.rawLine, 'Address ' + self.address + ' is not defined')
+    lineAssert(
+        self.address in addresses,
+        self.lineNumber,
+        self.rawLine,
+        f'Address {self.address} is not defined',
+    )
 
     offset = addresses[self.address] - self.currentAddress
 
@@ -188,7 +192,12 @@ class JumpDestResolver:
     self.register = register
 
   def resolveHex(self, addresses, _):
-    lineAssert(self.address in addresses, self.lineNumber, self.rawLine, 'Address ' + self.address + ' is not defined')
+    lineAssert(
+        self.address in addresses,
+        self.lineNumber,
+        self.rawLine,
+        f'Address {self.address} is not defined',
+    )
     return hex(self.operation << 24 | self.register << 20 | addresses[address] << 12)
 
 class BinDestResolver:
@@ -242,7 +251,12 @@ class DataLabelReferenceDestResolver:
 
     isUpper = parts[1].upper() == 'UPPER'
 
-    lineAssert(parts[0] in dataAddresses, self.lineNumber, self.rawLine, 'Data address reference ' + self.labelRef + ' does not reference an existing address')
+    lineAssert(
+        parts[0] in dataAddresses,
+        self.lineNumber,
+        self.rawLine,
+        f'Data address reference {self.labelRef} does not reference an existing address',
+    )
 
     address = dataAddresses[parts[0]]
 
@@ -296,13 +310,9 @@ class StringConstant:
   def resolveHex(self):
     chunks = []
     for i in xrange(0, len(self.string), 4):
-      hex = ''
-
-      for j in xrange(i, i+4):
-        if j < len(self.string):
-          hex += hexOfAsciiCode(self.string[j])
-        else:
-          hex += '00'
+      hex = ''.join(
+          hexOfAsciiCode(self.string[j]) if j < len(self.string) else '00'
+          for j in xrange(i, i + 4))
       chunks.append(int(hex, 16))
 
     if len(self.string) % 4 == 0:
@@ -346,7 +356,7 @@ def isValidString(text):
       walker = walker[1:]
       break
 
-    if walker[0:2] == '\\"':
+    if walker[:2] == '\\"':
       walker = walker[2:]
       continue
 
@@ -355,11 +365,7 @@ def isValidString(text):
   return walker.strip() == ''
 
 def isValidAddress(token):
-  for char in token:
-    if not (char.isalnum() or char == '_'):
-      return False
-
-  return True
+  return all((char.isalnum() or char == '_') for char in token)
 
 def isValidDataLabelReference(token):
   parts = token.split('.')
@@ -367,7 +373,7 @@ def isValidDataLabelReference(token):
   return len(parts) == 2 and isValidAddress(parts[0]) and parts[1].upper() in ['UPPER', 'LOWER']
 
 def formatAddressError(badAddress):
-  return badAddress + ' is not a valid address (must be alpha-numeric, can contain underscores)'
+  return f'{badAddress} is not a valid address (must be alpha-numeric, can contain underscores)'
 
 def parseRegister(token):
   if token.upper() in REGISTER_ALIASES:
@@ -398,21 +404,21 @@ def parseShort(token):
 def isValidByte(token):
   try:
     v = int(token, 0)
-    return 0 <= v and v <= 255
+    return 0 <= v <= 255
   except:
     return False
 
 def isValidShort(token):
   try:
     v = int(token, 0)
-    return 0 <= v and v <= 65535
+    return 0 <= v <= 65535
   except:
     return False
 
 def isValidLong(token):
   try:
     v = int(token, 0)
-    return 0 <= v and v <= 4294967296
+    return 0 <= v <= 4294967296
   except:
     return False
 
@@ -434,7 +440,7 @@ def isValidImmediateValue(token, maxValue):
       except:
         pass
 
-  return valid and 0 <= v and v <= maxValue
+  return valid and v >= 0 and v <= maxValue
 
 ZERO_FOUR = 73786976294838206464
 
@@ -449,11 +455,11 @@ def checksum(withoutChecksum):
 def formatInstructionHex(address, resolver, addresses, dataAddresses):
   op = int(resolver.resolveHex(addresses, dataAddresses), 0)
   withoutChecksum = ZERO_FOUR | op << 8 | address << 48
-  return ':0' + hex(withoutChecksum | checksum(withoutChecksum))[2:-1].upper()
+  return f':0{hex(withoutChecksum | checksum(withoutChecksum))[2:-1].upper()}'
 
 def formatDataHex(address, data):
   withoutChecksum = ZERO_FOUR | data << 8 | address << 48
-  return ':0' + hex(withoutChecksum | checksum(withoutChecksum))[2:-1].upper()
+  return f':0{hex(withoutChecksum | checksum(withoutChecksum))[2:-1].upper()}'
 
 def stripComments(line):
   resultLine = ''
@@ -483,12 +489,14 @@ def inlineIncludes(asmPath, originalLines):
       precompileAssert(len(tokens) == 3, line, 'Could not parse the include file from #include directive')
       includedPath = os.path.join(os.path.dirname(asmPath), tokens[1])
 
-      precompileAssert(os.path.exists(includedPath), line, 'Could not find included path, looked at ' + includedPath)
+      precompileAssert(
+          os.path.exists(includedPath),
+          line,
+          f'Could not find included path, looked at {includedPath}',
+      )
 
       with open(includedPath, 'r') as f:
-        for includedLine in f:
-          lines.append(includedLine.strip() + '\n')
-
+        lines.extend(includedLine.strip() + '\n' for includedLine in f)
     else:
       lines.append(line.strip() + '\n')
 
